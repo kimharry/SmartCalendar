@@ -1,23 +1,70 @@
 import os
+from dotenv import load_dotenv
 from openai import OpenAI
+from create_event import create_event
+import argparse
+import pytesseract
+# import pykospacing
 
-API_KEY = os.getenv("API_KEY")
-client = OpenAI(api_key=API_KEY)
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if OPENAI_API_KEY is None:
+    raise ValueError("API key is not set")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 instruction = """다음의 양식을 사용하여 사용자 요청에 응답하세요. 불필요한 정보 없이 양식만 따르세요.
 title: (이벤트의 제목)
-start_date: (시작 날짜, 형식: YYYY-MM-DD)
-end_date: (종료 날짜, 형식: YYYY-MM-DD)
+start_date: (시작 날짜, 형식: YYYY-MM-DDTHH:MM:SS)
+end_date: (종료 날짜, 형식: YYYY-MM-DDTHH:MM:SS)
 location: (위치)
 
-양식 외의 설명이나 추가적인 정보는 제공하지 않습니다."""""
+양식 외의 설명이나 추가적인 정보는 제공하지 않습니다."""
 
-response = client.chat.completions.create(
-    model="ft:gpt-3.5-turbo-0125:personal::AaLVuMzw",
-    messages=[
-        { "role": "system", "content": instruction },
-        { "role": "user", "content": '안녕하세요. RC교육센터입니다. RC교육센터에서는 1년 RC교육 활동을 정리하고, RC Triple Advising 정규면담, RC교육프로그램 운영을 위해 RC미리메리크리스마스를 계획하여 운영할 예정입니다. 행사 운영 및 준비로 인해 테슬라커뮤니티센터 및 교내식당 이용에 불편이 있을 수 있으니 구성원들의 너른 양해 부탁드립니다. -행사명: 2024 RC미리메리크리스마스 -행사장소: 테슬라커뮤니티센터 및 구내식당 -행사일시: 2024. 11. 27.(수) 18:00 ~ 23:00 -행사내용: RC Triple Advising 정기면담(Professor\'s Table), e-Sports Day 결승전, 대외 표창장 수여식, 트리점등식 등 -주요사항: 교내식당 식사는 18:30분 이전까지 이용 가능 11. 26.(화) ~ 7.(수), 양일 간 테슬라커뮤니티센터 로비 및 벙커 내 행사 물품 설치로 인해 소음과 소란이 발생할 수 있음' }
-    ]
-)
+def get_event_text(email_text):
+    response = client.chat.completions.create(
+        model="ft:gpt-3.5-turbo-0125:personal::AaLVuMzw",
+        messages=[
+            { "role": "system", "content": instruction },
+            { "role": "user", "content": email_text}
+        ]
+    )
 
-print(response.choices[0].message.content.strip())
+    result = response.choices[0].message.content.strip()
+    return result
+
+def extract_email_text(path):
+    text = pytesseract.image_to_string(path, lang="kor+eng")
+    text = text.replace(" ", "")
+    print(text)
+    return text
+
+def main():
+    parser = argparse.ArgumentParser(description="Create an event from an email")
+    parser.add_argument("--option", "-o", type=int, help="Input Option: 1 for text input, 2 for image input", required=True)
+    parser.add_argument("--input", "-i", type=str, help="Image path", required=False)
+    args = parser.parse_args()
+
+    if args.option == 1:
+        email_text = input("이메일 내용을 입력하세요: ")
+    elif args.option == 2:
+        email_text = extract_email_text(args.input)
+    else:
+        raise ValueError("Invalid option")
+    
+    event_text = get_event_text(email_text)
+    
+    print(event_text)
+    check = input("이벤트를 생성하시겠습니까? (y/n): ")
+
+    while True:
+        if check.lower() == "y":
+            create_event(event_text)
+            break
+        elif check.lower() == "n":
+            print("이벤트 생성을 취소합니다.")
+            break
+        else:
+            check = input("y 또는 n을 입력하세요: ")
+
+if __name__ == "__main__":
+    main()
